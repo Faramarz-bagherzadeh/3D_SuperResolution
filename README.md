@@ -4,7 +4,7 @@ Searching for the best deep learning model for 3D super-resolution and segmentat
 We have two sets of data low-res and high-res scans of the specimens.
 The order of the code: 
 
-1- Manual Alignment to bring two sets as close as possible. Including upsampling the low-res and downsampling+manual rotation of the high-res.
+1- Manual Alignment to bring two sets as close as possible.
 
 2- Use the SimpleITK image registration tool to create a set of data that is almost perfectly aligned.
 
