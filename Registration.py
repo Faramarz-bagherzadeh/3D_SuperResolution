@@ -26,35 +26,89 @@ def get_data (high_res_name,low_res_name):
     return fixed_image,moving_image
     
 def image_registration(fixed_image,moving_image,saving_name):
-    
-    initial_transform = sitk.CenteredTransformInitializer(fixed_image,moving_image,
-    sitk.Euler3DTransform(),
-    sitk.CenteredTransformInitializerFilter.GEOMETRY,)
+    t1 = time.time()
+    initial_transform = sitk.CenteredTransformInitializer(
+        fixed_image,
+        moving_image,
+        sitk.AffineTransform(3),
+        sitk.CenteredTransformInitializerFilter.GEOMETRY,
+    )
     
     t1 = time.time()
     registration_method = sitk.ImageRegistrationMethod()
-    registration_method.SetMetricAsANTSNeighborhoodCorrelation(2)
-    registration_method.SetMetricSamplingPercentage(0.5)
+
+# Similarity metric settings.
+    registration_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
+#registration_method.SetMetricAsANTSNeighborhoodCorrelation(2)
+    #registration_method.SetMetricAsMeanSquares()
+    #registration_method.SetMetricAsCorrelation()
+
+    registration_method.SetMetricSamplingStrategy(registration_method.RANDOM)
+    registration_method.SetMetricSamplingPercentage(0.75)
+
     registration_method.SetInterpolator(sitk.sitkLinear)
+
+# Optimizer settings.
+    registration_method.SetOptimizerAsRegularStepGradientDescent(
+            learningRate=1,
+            minStep=1e-4,
+            numberOfIterations=500,
+            gradientMagnitudeTolerance=1e-8,
+        )
     
-    # Optimizer settings.
-    registration_method.SetOptimizerAsGradientDescent(
-        learningRate=0.1,numberOfIterations=20,
-        convergenceMinimumValue=1e-6,convergenceWindowSize=100,)
+    #registration_method.SetOptimizerScalesFromPhysicalShift() #for units like mm
     
+    registration_method.SetOptimizerScalesFromIndexShift() # for voxels
+
+# Optimizer settings.
+#registration_method.SetOptimizerAsGradientDescent(learningRate=0.5,
+#                                                  numberOfIterations=200,
+#                                                  convergenceMinimumValue=1e-6,
+#                                                  convergenceWindowSize=20,)
+#
+
+#registration_method.SetOptimizerScalesFromIndexShift()
+
+#registration_method.SetOptimizerScalesFromPhysicalShift()
+#registration_method.SetOptimizerScalesFromJacobian()
+
+# Setup for the multi-resolution framework.
+    #creating lower resoltuions and then register them then use that
+    #registraiton function on the upper scale
+    registration_method.SetShrinkFactorsPerLevel(shrinkFactors=[ 2, 1])
+    
+    #apply Gaussian smoothing on the scaled images
+    registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[ 2, 0])
+    
+    #if the smothing sigmas unit is mm uncoment this line
+    #registration_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
+
+# Don't optimize in-place, we would possibly like to run this cell multiple times.
+# Set the initial moving and optimized transforms.
+#optimized_transform = sitk.Euler3DTransform()
+#registration_method.SetMovingInitialTransform(initial_transform)
+#registration_method.SetInitialTransform(optimized_transform, inPlace=False)
     registration_method.SetInitialTransform(initial_transform, inPlace=False)
+
+
     registration_method.AddCommand(sitk.sitkIterationEvent, lambda: command_iteration(registration_method))
     print(f" Iteration: {registration_method.GetOptimizerIteration()}")
 
     final_transform = registration_method.Execute(fixed_image, moving_image)
+
+# Always check the reason optimization terminated.
+
     print(f" Metric value: {registration_method.GetMetricValue()}")
     print("Final metric value: {0}".format(registration_method.GetMetricValue()))
-    print("Optimizer's stopping condition, {0}".format(
-        registration_method.GetOptimizerStopConditionDescription()))
+    print(
+    "Optimizer's stopping condition, {0}".format(
+            registration_method.GetOptimizerStopConditionDescription()
+        )
+    )
 
     t2 = time.time()
 
-    print ('registration time = ',round((t2-t1)/60) )
+    print ('registration time = ',round(t2-t1) )
     
     transformed_image = sitk.Resample(moving_image,fixed_image,final_transform,sitk.sitkLinear,0.0,moving_image.GetPixelID(),)
     transformed_image = sitk.GetArrayViewFromImage(transformed_image).astype('uint8')
@@ -80,7 +134,8 @@ def main():
     ]
     
     
-    for n in names:
+    for n in names[6:9]:
+        print (n)
         fixed_image,moving_image = get_data(high_res_name=n[0], low_res_name=n[1])
         image_registration(fixed_image,moving_image,saving_name=n[0])
 
