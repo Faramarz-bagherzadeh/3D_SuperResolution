@@ -26,6 +26,13 @@ def get_data (high_res_name,low_res_name):
     return fixed_image,moving_image
     
 def image_registration(fixed_image,moving_image,saving_name):
+
+    thresh1 = 100
+    thresh2 = 200
+    moving_mask = sitk.BinaryThreshold(moving_image, lowerThreshold=thresh1,upperThreshold=thresh2,insideValue=1, outsideValue=0)
+    fixed_mask = sitk.BinaryThreshold(fixed_image, lowerThreshold=thresh1,upperThreshold=thresh2,insideValue=1, outsideValue=0)
+
+
     t1 = time.time()
     initial_transform = sitk.CenteredTransformInitializer(
         fixed_image,
@@ -38,13 +45,17 @@ def image_registration(fixed_image,moving_image,saving_name):
     registration_method = sitk.ImageRegistrationMethod()
 
 # Similarity metric settings.
-    registration_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
-#registration_method.SetMetricAsANTSNeighborhoodCorrelation(2)
-    #registration_method.SetMetricAsMeanSquares()
+    #registration_method.SetMetricAsMattesMutualInformation(numberOfHistogramBins=50)
+    #registration_method.SetMetricAsANTSNeighborhoodCorrelation(2)
+    registration_method.SetMetricAsMeanSquares()
     #registration_method.SetMetricAsCorrelation()
+    
+    #Use the mask and thresholding the sampling area if needed. this works better with MSE as the metric
+    registration_method.SetMetricFixedMask(fixed_mask)
 
     registration_method.SetMetricSamplingStrategy(registration_method.RANDOM)
-    registration_method.SetMetricSamplingPercentage(0.75)
+    registration_method.SetMetricSamplingPercentage(0.1)
+    
 
     registration_method.SetInterpolator(sitk.sitkLinear)
 
@@ -75,19 +86,16 @@ def image_registration(fixed_image,moving_image,saving_name):
 # Setup for the multi-resolution framework.
     #creating lower resoltuions and then register them then use that
     #registraiton function on the upper scale
-    registration_method.SetShrinkFactorsPerLevel(shrinkFactors=[ 2, 1])
+    #registration_method.SetShrinkFactorsPerLevel(shrinkFactors=[ 2, 1])
     
     #apply Gaussian smoothing on the scaled images
-    registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[ 2, 0])
+    #registration_method.SetSmoothingSigmasPerLevel(smoothingSigmas=[ 2, 0])
     
     #if the smothing sigmas unit is mm uncoment this line
     #registration_method.SmoothingSigmasAreSpecifiedInPhysicalUnitsOn()
 
-# Don't optimize in-place, we would possibly like to run this cell multiple times.
-# Set the initial moving and optimized transforms.
-#optimized_transform = sitk.Euler3DTransform()
-#registration_method.SetMovingInitialTransform(initial_transform)
-#registration_method.SetInitialTransform(optimized_transform, inPlace=False)
+    # Don't optimize in-place,if running in Jupyter. memory sensetive
+
     registration_method.SetInitialTransform(initial_transform, inPlace=False)
 
 
