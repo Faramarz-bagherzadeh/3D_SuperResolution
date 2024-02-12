@@ -1,4 +1,4 @@
-
+import time
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,15 +12,20 @@ import kornia
 import skimage
 import cv2
 import random
-
+import os
 from augmentation import MyAugmentationPipeline
+from skimage.transform import downscale_local_mean
+import glob
 
 rng = torch.manual_seed(0)
 # Defining dataset
 class microCT_Dataset(Dataset):
 
         
-    def __init__(self, data_path, target_path, HR_patch_size, transform):
+    def __init__(self, list_files,train_or_test, HR_patch_size, transform, need_patches):
+        
+        self.dataset_type = train_or_test
+        self.patch_directory=(self.dataset_type+'_input_patches/',self.dataset_type+'_target_patches/')
         
         self.patch_sizeHR = HR_patch_size
         self.patch_sizeLR = int(self.patch_sizeHR*2)# patch_size
@@ -28,40 +33,78 @@ class microCT_Dataset(Dataset):
         self.stepHR = HR_patch_size
         self.stepLR = HR_patch_size
         
-        # reading data and dropping top and bottom layers
-        # these layers are empty becasue of registration 
-        self.data = tifffile.imread(data_path)[10:-10,:,:]
-        self.target = tifffile.imread(target_path)[10:-10,:,:]
-        
-        print ('reading data shape = ', self.data.shape)
-        print ('reading data max = ', self.data.max())
-        
-        # contrast stretching to avoid high intensity artifacts
-        self.data = self.contrast_stretching(self.data)
-        
-        #padding inputdata to a proper shape by adding half of the 
-        # difference between HR and LR patch size to each side of input
-        pd = int((self.patch_sizeLR-self.patch_sizeHR)/2)
-        #print ('padding amount = ',pd)
-        self.data = np.pad(self.data, ((pd,pd), (pd,pd), (pd,pd)), mode='constant') 
-
+        if need_patches == True:
+            data_path,target_path = self.generate_patches(list_files)
+        else:
+            
+            data_path= self.patch_directory[0]
+            target_path =self.patch_directory[1]
+            
+        self.data = glob.glob(self.patch_directory[0]+'*')
+        self.target = glob.glob(self.patch_directory[1]+'*')
         
         self.transform = transform
 
-      
-        # Data and target into patches
+        
+    def generate_patches(self,list_files):
+        if not os.path.exists(self.patch_directory[0]):
+            os.makedirs(self.patch_directory[0])
+            os.makedirs(self.patch_directory[1])
+            
+        for f in list_files:
+            print ('file name: ', f[0])
+            t1 = time.time()
+            file_tag = f[0][:2]
+            data_path = 'data/' + f[0]
+            target_path = 'data/' + f[1]
+            # reading data and dropping top and bottom layers
+            # these layers are empty becasue of registration 
+            data = tifffile.imread(data_path)[10:-10,:,:]
+            target = tifffile.imread(target_path)[10:-10,:,:]
+            
+            print ('reading data shape = ', data.shape)
+            print ('reading data max = ', data.max())
+            
+            # contrast stretching to avoid high intensity artifacts
+            data = self.contrast_stretching(data)
+            
+            #padding inputdata to a proper shape by adding half of the 
+            # difference between HR and LR patch size to each side of input
+            pd = int((self.patch_sizeLR-self.patch_sizeHR)/2)
+            #print ('padding amount = ',pd)
+            data = np.pad(data, ((pd,pd), (pd,pd), (pd,pd)), mode='constant') 
 
-        self.data = self.patchyfy_img(self.data,self.patch_sizeLR,self.stepLR)
-        self.target = self.patchyfy_img(self.target,self.patch_sizeHR,self.stepHR)
-        
-        
-        print ('out_of_loader data shape = ', self.data.shape)
-        print ('out_of_loader data max = ', self.data.max())
+            # Data and target into patches
+    
+            data = self.patchyfy_img(data,self.patch_sizeLR,self.stepLR)
+            target = self.patchyfy_img(target,self.patch_sizeHR,self.stepHR)
+            
+            
+            print ('out_of_loader data shape = ', data.shape)
+            print ('out_of_loader data max = ', data.max())
+    
+            print ('out_of_loader target shape = ', target.shape)
+            print ('out_of_loader target max = ', target.max())
+            
 
-        print ('out_of_loader target shape = ', self.target.shape)
-        print ('out_of_loader target max = ', self.target.max())
+            
+            if not data.shape[0] == target.shape[0]:
+                print ('the patching is not correct!! STOP')
+                return None
+            
+            for i in range(data.shape[0]):
+                
+                # the input data was upscaled for image registration.
+                # now we downscale it back to original
+                down_scaled = downscale_local_mean(data[i], (2,2,2))
+                
+                tifffile.imwrite(self.patch_directory[0]+file_tag+str(1000+i)+'.tif',down_scaled)
+                tifffile.imwrite(self.patch_directory[1]+file_tag+str(1000+i)+'.tif',target[i])
+                
         
-        
+            t2=time.time()
+            print ('Time = ',round((t2-t1)/60),' minutes')
+        return self.patch_directory
         
     def patchyfy_img(self,img, ps, step):
         img = patchify(img,(ps, ps, ps) ,  step=step )
@@ -82,8 +125,8 @@ class microCT_Dataset(Dataset):
     
     def __getitem__(self, index):
 
-        data = torch.from_numpy(self.data[index]).unsqueeze(0).float()
-        target = torch.from_numpy(self.target[index]).unsqueeze(0).float()
+        data = torch.from_numpy(tifffile.imread(self.data[index])).unsqueeze(0).float()
+        target = torch.from_numpy(tifffile.imread(self.target[index])).unsqueeze(0).float()
         
         
         
