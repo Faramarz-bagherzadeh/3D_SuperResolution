@@ -12,7 +12,9 @@ The order of the code:
 
 4- Developing different DL architectures.
 
-5- Reporting metrics.
+5- Quantitative and qualitative analysis.
+
+6- voxel-wise and microstructural metrics.
 
 
 ![Data Sample](visualization_data.jpg)
