@@ -38,15 +38,24 @@ def contrast_stretching(img):
     return img
 
 
-def reshape_to_power_of_2(data):
+def reshape_to_power_of_2(data, patch_size):
     # Check if the shape of the image in each dimension is a power of 2
     original_shape = data.shape
+    
+    padding_1 = [(patch_size, patch_size),(patch_size, patch_size),(patch_size, patch_size)]
+    data = np.pad(data, padding_1, mode='constant', constant_values=0)
+    
     new_shape = [2**int(np.ceil(np.log2(dim))) for dim in data.shape]
-    padding = [(0, new_dim - old_dim) for old_dim, new_dim in zip(data.shape, new_shape)]
-    data = np.pad(data, padding, mode='constant', constant_values=0)
+    padding_2 = [(0, new_dim - old_dim) for old_dim, new_dim in zip(data.shape, new_shape)]
+    data = np.pad(data, padding_2, mode='constant', constant_values=0)
+    
     print ('original_shape =',original_shape)
-    print ('padding = ',padding)
-    return original_shape, padding, data
+    print ('padding_1 = ',padding_1)
+    print ('padding_2 = ',padding_2)
+    print ('data shape after padding = ', data.shape)
+    
+    return original_shape, padding_1,padding_2, data
+
 
 def patchyfy_img(img, ps, step):
     padded_shape = img.shape
@@ -55,12 +64,14 @@ def patchyfy_img(img, ps, step):
     img = img.reshape(img.shape[0]*img.shape[1]*img.shape[2],ps,ps,ps )
     return padded_shape, patched_shape,img
 
-def build_original_image(img,patched_shape, padded_shape, original_shape, padding):
+def build_original_image(img,patched_shape, padded_shape, original_shape, padding_1, padding_2):
     img = img.reshape(patched_shape)
     print (img.shape)
     img = unpatchify(img, padded_shape)
     print (img.shape)
-    img = img[:img.shape[0]-padding[0][1], :img.shape[1]-padding[1][1], :img.shape[2]-padding[2][1]]
+    img = img[:img.shape[0]-padding_2[0][1], :img.shape[1]-padding_2[1][1], :img.shape[2]-padding_2[2][1]]
+    print (img.shape)
+    img = img[32:-32,32:-32,32:-32]
     print (img.shape)
     return img
 
@@ -93,26 +104,31 @@ def main(data,name):
     patch_size = 64
     
     data = contrast_stretching(data)
-    original_shape, padding , data = reshape_to_power_of_2(data)
+    original_shape, padding_1,padding_2, data = reshape_to_power_of_2(data,patch_size)
     padded_shape, patched_shape, data = patchyfy_img(data,ps=2*patch_size,step=patch_size)
     
     import model_SRCNN
     model = model_SRCNN.SRCNN()
     load_checkpoint(torch.load("my_SRCNN_checkpoint.pth.tar",map_location=torch.device(device) ), model)
+   # import UNET
+   # model = UNET.UNet(1,1)
+   # load_checkpoint(torch.load("my_SRUNET_checkpoint.pth.tar",map_location=torch.device('cpu') ), model) 
     
-    #import UNET
-    #model = UNET.UNet(1,1)
-    #load_checkpoint(torch.load("my_SRUNET_checkpoint.pth.tar",map_location=torch.device('cpu') ), model) 
-    
-    #import DCSRN_2
-    #model = DCSRN_2.DCSRN(1)
+    #import DCSRN
+    #model = DCSRN.DCSRN(1)
     #load_checkpoint(torch.load("my_DCSRN_checkpoint.pth.tar",map_location=torch.device('cpu') ), model)
+   # import SRResnet
+   # model = SRResnet.SRResNet()
+   # load_checkpoint(torch.load("my_SRResnet_checkpoint.pth.tar",map_location=torch.device(device) ), model)
     
+
     prediction = predict(model,data,patch_size)
-    
     new_paded_shape = np.array(padded_shape)-patch_size
     new_patched_shape = list(patched_shape[:3]) + [64,64,64]
-    prediction2 = build_original_image(prediction,new_patched_shape, new_paded_shape, original_shape, padding)
+
+    prediction2 = build_original_image(prediction,new_patched_shape,
+                                       new_paded_shape,original_shape,
+                                       padding_1, padding_2)
     prediction2 = prediction2.astype('uint8')
     
     tifffile.imwrite('model_output/'+name+'_predictions_SRCNN_.tif', prediction2)
@@ -129,8 +145,8 @@ if __name__ == "__main__":
     
     for f in range (len(test_files)):
         
-        data = tifffile.imread('data/'+test_files[f])[:127,:,:]
-        name = test_files[f][:10]
+        data = tifffile.imread('data/'+test_files[f])
+        name = test_files[f][:11]
         main(data, name)
     
     
