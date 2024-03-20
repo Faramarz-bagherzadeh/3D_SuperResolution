@@ -41,22 +41,32 @@ def puma_mean_intercept_length(binary):
 
 def puma_tortuosity (binary):
     print ('Tortousity started !') 
-    binary = downscale_local_mean(binary, (4,4,4))
+    outputs = []
+    
+    #binary = downscale_local_mean(binary, (8,8,8))
     binary[binary>0.5] = 1
     binary[binary<=0.5] = 0
-    ws = puma.Workspace.from_array(binary.copy())
-    ws.voxel_length = 240e-6
-
-    ws = puma.Workspace.from_array(binary.copy())
+    ws = puma.Workspace.from_array(binary)
+    ws.voxel_length = 60e-6
     #print(f"Shape of workspace: {ws.matrix.shape}")
-    n_eff_x, Deff_x, poro, C_x = puma.compute_continuum_tortuosity(ws, (0,0.5), 'x', side_bc='p', tolerance=1e-4, solver_type='cg')
-    n_eff_y, Deff_y, poro, C_y = puma.compute_continuum_tortuosity(ws, (0,0.5), 'y', side_bc='p', tolerance=1e-4, solver_type='cg')
-    n_eff_z, Deff_z, poro, C_z = puma.compute_continuum_tortuosity(ws, (0,0.5), 'z', side_bc='p', tolerance=1e-4, solver_type='cg')
+    st = 'cg' #'bicgstab'#'direct' #
+    mf = False
+    n_eff_x, Deff_x, poro, C_x = puma.compute_continuum_tortuosity(ws, (0,0), 'x', side_bc='s', tolerance=1e-4, solver_type=st, matrix_free = mf)
+    n_eff_y, Deff_y, poro, C_y = puma.compute_continuum_tortuosity(ws, (0,0), 'y', side_bc='s', tolerance=1e-4, solver_type=st, matrix_free = mf)
+    n_eff_z, Deff_z, poro, C_z = puma.compute_continuum_tortuosity(ws, (0,0), 'z', side_bc='s', tolerance=1e-4, solver_type=st, matrix_free = mf)
+    outputs.append(['inside Air',str((round(n_eff_x[0],1), round(n_eff_y[1],1) , round(n_eff_z[2],1)))])
+
+    n_eff_x, Deff_x, poro, C_x = puma.compute_continuum_tortuosity(ws, (1,1), 'x', side_bc='s', tolerance=1e-4, solver_type=st, matrix_free = mf)
+    n_eff_y, Deff_y, poro, C_y = puma.compute_continuum_tortuosity(ws, (1,1), 'y', side_bc='s', tolerance=1e-4, solver_type=st, matrix_free = mf)
+    n_eff_z, Deff_z, poro, C_z = puma.compute_continuum_tortuosity(ws, (1,1), 'z', side_bc='s', tolerance=1e-4, solver_type=st, matrix_free = mf)
+    outputs.append(['inside Ice',str((round(n_eff_x[0],1), round(n_eff_y[1],1) , round(n_eff_z[2],1)))])    
+    
+    
     print ('Tortousity done')
    # poro is the porosity of the material
    # n_eff is the effective tortuosity factor
    # C_x is the computed field vector
-    return n_eff_x, n_eff_y , n_eff_z
+    return str(outputs)
 
 
 def puma_orientations(binary):
@@ -154,23 +164,23 @@ def main ():
             data = read_and_preprocessing(f[name], slice_)
             data = binary_seg_kMeans(data)
 
-            microstructur_result.at[row_number, 'permeability'] = str(puma_permeability(data))
+            #microstructur_result.at[row_number, 'permeability'] = str(puma_permeability(data))
 
             microstructur_result.at[row_number, 'type'] = type_
             microstructur_result.at[row_number, 'name'] = name
-            mm = microstructure_metric(data)
-            microstructur_result.at[row_number, 'density'] = round(mm['density'], 2)
-            microstructur_result.at[row_number, 'porosity'] = round(mm['porosity'], 2)
-            microstructur_result.at[row_number, 'SSA'] = round(mm['SSA'], 0)
-            microstructur_result.at[row_number, 'euler'] = round(mm['euler'], 0)
-            microstructur_result.at[row_number, 'mil'] = str(puma_mean_intercept_length(data))
+            #mm = microstructure_metric(data)
+            #microstructur_result.at[row_number, 'density'] = round(mm['density'], 2)
+            #microstructur_result.at[row_number, 'porosity'] = round(mm['porosity'], 2)
+            #microstructur_result.at[row_number, 'SSA'] = round(mm['SSA'], 0)
+            #microstructur_result.at[row_number, 'euler'] = round(mm['euler'], 0)
+            #microstructur_result.at[row_number, 'mil'] = str(puma_mean_intercept_length(data))
 
-            microstructur_result.at[row_number, 'orientation'] = str(puma_orientations(data))
-#            microstructur_result.at[row_number, 'tortuosity'] = str(puma_tortuosity(data))
+            #microstructur_result.at[row_number, 'orientation'] = str(puma_orientations(data))
+            microstructur_result.at[row_number, 'tortuosity'] = str(puma_tortuosity(data))
 
 #            break
 #        break
-    microstructur_result.to_csv('microstructure_metrics.csv')
+    microstructur_result.to_csv('microstructure_metrics_tort.csv')
 
 if __name__ == "__main__":
     main()
