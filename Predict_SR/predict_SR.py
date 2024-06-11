@@ -27,11 +27,13 @@ def contrast_stretching(img):
             input_image = img[i*batch:(i+1)*batch]
             p2, p98 = np.percentile(input_image, (2, 98))
             img[i*batch:(i+1)*batch] = skimage.exposure.rescale_intensity(input_image, in_range=(p2, p98))
+            print(f"Progress: {round(((i+1)*batch)*100/img.shape[0])} %", end='\r')
+
         else:
-            input_image = img[i*batch:]
-            p2, p98 = np.percentile(input_image, (2, 98))
-            img[i*batch:] = skimage.exposure.rescale_intensity(input_image, in_range=(p2, p98))
-        print(f"Progress: {round(((i+1)*batch)*100/img.shape[0])} %", end='\r')
+            input_image = img[i*batch:] 
+            if input_image.size > 10:
+                p2, p98 = np.percentile(input_image, (2, 98))
+                img[i*batch:] = skimage.exposure.rescale_intensity(input_image, in_range=(p2, p98))
     return img
 
 
@@ -79,7 +81,6 @@ def load_checkpoint(checkpoint, model):
 
 def predict(model,data,patch_size):
 
-
     prediction = np.zeros((data.shape[0],patch_size,patch_size,patch_size))
     print ('number of cpus',torch.get_num_threads())
     torch.set_num_threads(120)
@@ -108,7 +109,6 @@ def Super_resolution(data,model):
     padded_shape, patched_shape, data = patchyfy_img(data,ps=2*patch_size,step=patch_size)
 
 
-
     prediction = predict(model,data,patch_size)
     new_paded_shape = np.array(padded_shape)-patch_size
     new_patched_shape = list(patched_shape[:3]) + [64,64,64]
@@ -121,12 +121,12 @@ def Super_resolution(data,model):
 
 
 
-def main (data,model):
+def data_spliting (data,model):
     scale = 2.0
     output = np.zeros_like(ndimage.zoom(data[:2,:,:],scale, order = 1, prefilter=False, grid_mode=False))
-    step = 400
-    
-    for s in range (step,data.shape[0],step):
+    step = 64
+
+    for s in range (step,data.shape[0]+step,step):
         if s+step > data.shape[0]:
             img = data[s:,:,:]
         else:
@@ -169,12 +169,12 @@ if __name__ == "__main__":
 
     
     for f in paths:
-        data = tifffile.imread(f)[:150,:800,:800]
+        data = tifffile.imread(f)[:100,:800,:800]
         name = f[6:-4]
         print ('file name = ', name)
         print ('low res shape = ',data.shape)
         
-        output = main(data, model)
+        output = data_spliting(data, model)
        
         tifffile.imwrite('output/'+name+'_predictions_SRRESNET_.tif', output)
         break
