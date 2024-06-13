@@ -204,7 +204,7 @@ if __name__ == "__main__":
         #break
     
         t2= time.time()
-        print ('Time =', round((t2-t1)/3600))
+        print ('Time (h) =', round((t2-t1)/3600))
     
     
     
