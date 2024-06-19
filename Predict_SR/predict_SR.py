@@ -137,6 +137,41 @@ def data_spliting (data,model):
         
     return output
 
+def get_ice_part(image, thresh1, thresh2, thickness):
+    import cv2
+    final_mask = np.zeros_like(image)
+    for i in range(image.shape[0]):
+        img = image[i]
+        # Apply a binary threshold to create a binary image
+        _, binary = cv2.threshold(img, thresh1, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
+
+        mask_1 = np.zeros_like(binary) # for removing tube
+        mask_2 = np.zeros_like(binary) # contains ice
+        mask_3 = np.zeros_like(binary) # for removing middle part
+        #print ('number of contours in first mask',len(contours))
+        for cnt in contours[:]:
+            area = cv2.contourArea(cnt)
+            if area > 100:  # Adjust this threshold based on the size of the ice pieces
+                cv2.drawContours(mask_1, [cnt], -1, 1, thickness=thickness)
+                cv2.drawContours(mask_2, [cnt], -1, 1, thickness=-1)
+        mask_2[mask_1 == 1] =0
+        img = mask_2*img
+        _, binary = cv2.threshold(img, thresh2, 1, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        binary = cv2.dilate(binary, kernel=None, iterations=1)
+
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)  
+        #print ('number of contours in second mask',len(contours))
+        contours = sorted(contours, key=lambda x: cv2.contourArea(x), reverse=True)
+
+        for cnt in contours[:2]:
+            area = cv2.contourArea(cnt)
+            if area > 100:  # Adjust this threshold based on the size of the ice pieces
+                cv2.drawContours(mask_3, [cnt], -1, 1, thickness=-1)
+        final_mask[i] = mask_3
+    return final_mask
+
     
     
 if __name__ == "__main__":
@@ -186,13 +221,16 @@ if __name__ == "__main__":
     model.to(device)
     
     
-    paths = glob.glob('data/*')
-    print(paths)
-
+    #paths = glob.glob('data/*')
+    #print(paths)
+    paths = ['data/B40_Bag108_109_hxfb101ms_block_0.tif', 'data/B40_Bag12_13_hxfb101ms_block_0.tif', 'data/B40_Bag56_57_hxfb101ms_block_0.tif']
+    slices = [(70,-55),(65,-55),(65,-55)]
     
-    for f in paths:
+    for i, f in enumerate(paths):
         t1 = time.time()
-        data = tifffile.imread(f)
+        data = tifffile.imread(f)[slices[i][0]:slices[i][1]]
+        mask = get_ice_part(data, 10, 20, 30)
+        data = data *mask
         name = f[6:-4]
         print ('*********************************************')
         print ('file name = ', name)
@@ -200,7 +238,7 @@ if __name__ == "__main__":
         
         output = data_spliting(data, model)
        
-        tifffile.imwrite('output/'+name+'_predictions_SRResNet_B_.tif', output)
+        tifffile.imwrite('output/'+name+'_predictions_SRResNet_C_.tif', output)
         #break
     
         t2= time.time()
